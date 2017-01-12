@@ -1,0 +1,11 @@
+{
+  "plugins": [
+    ["transform-object-rest-spread", { "useBuiltIns": true }],
+    ["transform-function-bind"],
+    ["transform-runtime", {
+      "helpers": false, // defaults to true
+      "polyfill": false, // defaults to true
+      "regenerator": false, // defaults to true
+    }]
+  ]
+}
