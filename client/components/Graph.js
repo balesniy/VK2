@@ -168,14 +168,15 @@ export default class Graph extends Component {
 
       function click({ id }) {
         if (!event.defaultPrevented) {
+          console.log(id)
           const data = deepSearch(graph, id);
           if (data.friends) {
             data._friends = data.friends;
-            data.friends = null;
+            data.friends = undefined;
           }
           else {
-            data.friends = data._friends || null;
-            data._friends = null;
+            data.friends = data._friends;
+            data._friends = undefined;
           }
           update();
         }

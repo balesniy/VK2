@@ -99,7 +99,7 @@ function getState({ graph, payload }) {
     {
       id:      payload.id,
       group:   0,
-      friends: friends.map(({ friends, id }) => ({
+      _friends: friends.map(({ friends, id }) => ({
         id,
         group:    1,
         _friends: friends.map(id => ({
