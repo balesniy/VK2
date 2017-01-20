@@ -1,218 +1,134 @@
 import React, {Component} from 'react'
 import {select, scaleOrdinal, schemeCategory20, drag, event} from "d3";
+import {forceSimulation, forceLink, forceManyBody, forceCollide, forceCenter} from "d3";
 
 export default class Graph extends Component {
-  componentDidMount() {
-    this.meter = this.refs.meter;
-    this.worker = new Worker("worker.js");
-    this.svg = select(this.refs.graph)
-      .append("svg").attr('width', 1200).attr('height', 800);
+  constructor(props) {
+    super(props);
+    this.state = {
+      nodes: [],
+      links: []
+    }
   }
 
-  componentWillReceiveProps({ graph, result:[result1 = { photo: '' }], result2:[result2 = { photo: '' }] }) {
+  componentWillReceiveProps({ graph, getPhoto }) {
+    const simulation = forceSimulation()
+      .force("link", forceLink().id(({ id }) => id))
+      .force("charge", forceManyBody())
+      .force("collide", forceCollide(20))
+      .force("center", forceCenter(1200 / 2, 800 / 2));
 
-    const { svg, worker, meter } = this;
-    const color = scaleOrdinal(schemeCategory20);
-    if (graph.length) {
-      update();
-    }
+    const concat = (data = []) => [].concat(...data);
+    const getLink = (value) => ({ id, friends = [] }) => friends.map(i => ({
+      source: id,
+      target: i.id,
+      value
+    }));
+    const mapWith = (data = []) => (f) => concat(data.map(f));
+    const inTheMiddle = ({ id }) => middleSet.includes(id);
+
+    const [set1 = new Set(), set2 = new Set()] = graph.map(
+      ({ _friends = [] }) => mapWith(_friends)(({ _friends = [] }) => _friends)
+    ).map(data => new Set(data.map(({ id }) => id)));
+    const middleSet = [...set1].filter(i => set2.has(i));
+    graph.forEach(i => {
+      i.friends = (i._friends || []).filter(({ _friends = [] }) => _friends.some(inTheMiddle))
+    });
+    const friends = mapWith(graph)(({ friends = [] }) => friends);
+    friends.forEach(i => {
+      i.friends = (i._friends || []).filter(inTheMiddle)
+    });
+
+    const firstLinks = mapWith(graph)(getLink(4));
+    const allLinks = mapWith(friends)(getLink(1));
+    const allFriends = middleSet.filter(id => !friends.some(i => i.id == id)).map(id => ({
+      id,
+      group: 2
+    }));
+
+    const links = [...firstLinks, ...allLinks];
+    const nodes = [...graph, ...friends, ...allFriends];
+
+    simulation.nodes(nodes).force("link").links(links);
+    simulation.on("tick", ::this.forceUpdate);
+    this.setState({
+      nodes,
+      links
+    });
 
     function mouseover() {
       select(this).transition()
         .duration(750)
-        .attr("r", 16);
+        .attr("r", 20);
     }
 
     function mouseout() {
       select(this).transition()
         .duration(750)
-        .attr("r", 8);
+        .attr("r", 10);
     }
 
-    function tick({ progress }) {
-      meter.style.width = 100 * progress + "%";
-    }
+    // const getPattern = ({ uid, photo_50 }) => {
+    //   const pattern = defs.append("pattern")
+    //     .attr("id", uid)
+    //     .attr("height", 1)
+    //     .attr("width", 1)
+    //     .attr("x", 0)
+    //     .attr("y", 0);
+    //   // pattern.append("image")
+    //   //   .attr("x", 0)
+    //   //   .attr("y", 0)
+    //   //   .attr("height", 40)
+    //   //   .attr("width", 40)
+    //   //   .attr("xlink:href", photo_50);
+    //   // return pattern
+    // };
 
-    function ended({ nodes, links }) {
-      svg.html('');
-      // const defs = this.svg.append("defs").attr("id", "imgdefs")
-      // const catpattern1 = defs.append("pattern")
-      //   .attr("id", "catpattern1")
-      //   .attr("height", 1)
-      //   .attr("width", 1)
-      //   .attr("x", 0)
-      //   .attr("y", 0);
-      // catpattern1.append("image")
-      //   .attr("x", 0)
-      //   .attr("y", 0)
-      //   .attr("height", 40)
-      //   .attr("width", 40)
-      //   .attr("xlink:href", result1.photo);
-      // const catpattern2 = defs.append("pattern")
-      //   .attr("id", "catpattern2")
-      //   .attr("height", 1)
-      //   .attr("width", 1)
-      //   .attr("x", 0)
-      //   .attr("y", 0);
-      // catpattern2.append("image")
-      //   .attr("x", 0)
-      //   .attr("y", 0)
-      //   .attr("height", 40)
-      //   .attr("width", 40)
-      //   .attr("xlink:href", result2.photo);
-      // const simulation = d3f.forceSimulation()
-      //   .force("link", d3f.forceLink().id(({ data:{ id } }) => id).distance(30))
-      //   .force("charge", d3f.forceManyBody().strength(-10).distanceMin(1).distanceMax(500))
-      //   .force("collide", d3f.forceCollide(8))
-      //   .force("center", d3f.forceCenter(1200 / 2, 800 / 2));
+    function update() {
 
-      const link = svg.append("g")
-        .attr("class", "links")
-        .selectAll("line")
-        .data(links)
-        .enter().append("line")
-        .attr("stroke-width", 1)
-      //.attr("stroke-width", function (d) { return Math.sqrt(d.value); });
-      const node = svg.append("g")
-        .attr("class", "nodes")
-        .selectAll("circle")
-        .data(nodes)
-        .enter().append("circle")
-        //.attr("r", function (d) { return d.group == 0 || d.group == 1 ? 20 : (20 - d.group * 5); })
-        .attr("r", 8)
-        // .attr("fill", function ({ group }) {
-        //     let fill;
-        //     switch (group) {
-        //       case 0 :
-        //         fill = "url(#catpattern1)";
-        //         break;
-        //       case 1:
-        //         fill = "url(#catpattern2)";
-        //         break;
-        //       default:
-        //         fill = color(group);
-        //     }
-        //     return fill
-        //   }
-        // )
-        .attr("fill", ({ group }) => color(group))
-        .on("mouseover", mouseover)
-        .on("mouseout", mouseout)
-        .on("click", click)
-      // .call(drag()
-      //   .on("start", dragstarted)
-      //   .on("drag", dragged)
-      //   .on("end", dragended));
 
-      node.append("title")
-        .text(({ id }) => id);
-      link
-        .attr("x1", function (d) { return d.source.x; })
-        .attr("y1", function (d) { return d.source.y; })
-        .attr("x2", function (d) { return d.target.x; })
-        .attr("y2", function (d) { return d.target.y; });
+      // getPhoto(nodes.map(({ id }) => id))
+      //   .then(({ payload }) => payload.map(getPattern))
+      //   .then(() => node.attr("fill", ({ id }) => `url(#${id})`));
 
-      node
-        .attr("cx", function (d) { return d.x; })
-        .attr("cy", function (d) { return d.y; });
+      // node.append("title")
+      //   .text(({ id }) => id);
 
-      function ticked() {
-        link
-          .attr("x1", function (d) { return d.source.x; })
-          .attr("y1", function (d) { return d.source.y; })
-          .attr("x2", function (d) { return d.target.x; })
-          .attr("y2", function (d) { return d.target.y; });
-
-        node
-          .attr("cx", function (d) { return d.x; })
-          .attr("cy", function (d) { return d.y; });
-      }
-
-      function dragstarted(d) {
-        if (!event.active) {
-          simulation.alphaTarget(0.3).restart();
-        }
-        d.fx = d.x;
-        d.fy = d.y;
-      }
-
-      function dragged(d) {
-        d.fx = event.x;
-        d.fy = event.y;
-      }
-
-      function dragended(d) {
-        if (!event.active) {
-          simulation.alphaTarget(0);
-        }
-        d.fx = null;
-        d.fy = null;
-      }
-
-      function deepSearch(a, id) {
-        for (let data of a) {
-          if (data.id == id) {
-            return data
-          }
-          else {
-            if (data.friends) {
-              const deep = deepSearch(data.friends, id);
-              if (deep) {
-                return deep
-              }
-            }
-          }
-        }
-
-      }
-
-      function click({ id }) {
-        if (!event.defaultPrevented) {
-          console.log(id)
-          const data = deepSearch(graph, id);
-          if (data.friends) {
-            data._friends = data.friends;
-            data.friends = undefined;
-          }
-          else {
-            data.friends = data._friends;
-            data._friends = undefined;
-          }
-          update();
-        }
-      }
-
-    }
-
-    function
-
-    update() {
-
-      worker.postMessage(graph);
-      worker.onmessage = function ({ data }) {
-        switch (data.type) {
-          case "tick":
-            return tick(data);
-          case "end":
-            return ended(data);
-          case "friends":
-            console.log(data);
-        }
-      };
-
-      // simulation
-      //   .nodes(nodes)
-      //   .on("tick", ticked);
-      //
-      // simulation.force("link")
-      //   .links(links);
     }
   }
 
+  click(data) {
+
+    console.log(data)
+
+      // if (data._closed) {
+      //   [data._friends, data._closed] = [data._closed, undefined];
+      // }
+      // else {
+      //   [data._closed, data._friends] = [data._friends, undefined];
+      // }
+      // update();
+  }
+
   render() {
-    return <div>
-      <div ref="meter" className="progress"></div>
-      <div ref="graph"></div>
-    </div>
+    const color = scaleOrdinal(schemeCategory20);
+
+    return <svg width={1200} height={800}>
+      <defs>
+        {this.state.nodes.map(node => <pattern id="" height="1" width="1" x="0" y="0">
+          <image x="0" y="0" height="40" width="40" xlinkHref=""/>
+        </pattern>)}
+      </defs>
+
+
+      {this.state.nodes.map(
+        node => <circle key={node.index} className="nodes" cx={node.x} cy={node.y}
+                        r={node.group == 0 ? 20 : (20 - node.group * 5)}
+                        stroke={color(node.group)}/>)}
+      {this.state.links.map(
+        link => <line key={link.index} x1={link.source.x} y1={link.source.y} x2={link.target.x} y2={link.target.y}
+                      strokeWidth={Math.sqrt(link.value)}
+                      className="links"/>)}
+    </svg>
   }
 }
